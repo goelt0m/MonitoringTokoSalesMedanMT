@@ -1,0 +1,174 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Toko</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .store-name {
+            cursor: pointer;
+            color: blue;
+            text-decoration: underline;
+        }
+        #image-display {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px dashed #ccc;
+            min-height: 100px;
+            background-color: #f9f9f9;
+        }
+        #image-display h3 {
+            margin-top: 0;
+        }
+        #loading, #error {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Daftar Data Toko</h1>
+
+    <div id="loading">Memuat data...</div>
+    <div id="error" style="display: none;"></div>
+    <table id="data-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>Nama Toko</th>
+                <th>Tanggal Terakhir Order</th>
+                <th>Tanggal Terakhir Tagihan</th>
+                <th>Jumlah Tagihan</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+
+    <div id="image-display" style="display: none;">
+        <h3>Gambar Toko: <span id="displayed-store-name"></span></h3>
+        <div id="embed-content">
+            </div>
+    </div>
+
+    <script>
+        const sheetId = '1PbquTkyFiN3zcnmTkuD3iIfcaKPo8l05zCfHhXT-qQ0';
+        // Ganti 'Sheet1' jika nama sheet Anda berbeda. EncodeURIComponent penting jika nama sheet mengandung spasi atau karakter khusus.
+        const sheetName = encodeURIComponent('Sheet1');
+        // URL ini menggunakan Google Visualization API Query Language untuk mendapatkan data JSON dari sheet yang dipublikasikan
+        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+
+        const dataTable = document.getElementById('data-table');
+        const dataTableBody = dataTable.querySelector('tbody');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const imageDisplayDiv = document.getElementById('image-display');
+        const embedContentDiv = document.getElementById('embed-content');
+        const displayedStoreNameSpan = document.getElementById('displayed-store-name');
+
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.text();
+            })
+            .then(text => {
+                // Respons dari gviz/tq dibungkus dalam teks JavaScript. Kita perlu mengekstrak JSON-nya.
+                const jsonString = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/);
+                if (!jsonString || jsonString.length < 2) {
+                    throw new Error("Format respons tidak valid.");
+                }
+                const jsonData = JSON.parse(jsonString[1]);
+
+                if (jsonData.status === 'error') {
+                    throw new Error(`Google Sheet Error: ${jsonData.errors.map(e => e.detailed_message).join(', ')}`);
+                }
+
+                const rows = jsonData.table.rows;
+                // Kosongkan tabel sebelum mengisi data baru (jika ada pemanggilan ulang)
+                dataTableBody.innerHTML = '';
+
+                // Asumsi: Baris pertama (indeks 0) adalah header, jadi kita mulai dari indeks 1
+                // Jika sheet Anda tidak punya header, mulai dari i = 0
+                for (let i = 1; i < rows.length; i++) {
+                    const rowData = rows[i].c; // 'c' adalah array sel dalam baris
+
+                    // PERHATIKAN INDEKS KOLOM DI BAWAH INI! Sesuaikan jika perlu.
+                    // rowData[index]?.v mengambil nilai ('value') dari sel.
+                    // ?. adalah optional chaining, aman jika selnya kosong (null).
+                    const namaToko = rowData[0]?.v ?? ''; // Kolom A (indeks 0)
+                    const tglOrder = rowData[1]?.f ?? rowData[1]?.v ?? ''; // Kolom B (indeks 1),优先使用format (f) jika ada
+                    const tglTagihan = rowData[2]?.f ?? rowData[2]?.v ?? ''; // Kolom C (indeks 2)
+                    const jmlTagihan = rowData[3]?.f ?? rowData[3]?.v ?? ''; // Kolom D (indeks 3)
+                    const embedCode = rowData[4]?.v ?? ''; // Kolom E (indeks 4)
+
+                    const tr = document.createElement('tr');
+
+                    // Kolom Nama Toko (bisa diklik)
+                    const tdNama = document.createElement('td');
+                    const spanNama = document.createElement('span');
+                    spanNama.textContent = namaToko;
+                    spanNama.classList.add('store-name');
+                    spanNama.dataset.embed = embedCode; // Simpan embed code di data attribute
+                    spanNama.dataset.storename = namaToko; // Simpan nama toko
+                    spanNama.addEventListener('click', function() {
+                        displayedStoreNameSpan.textContent = this.dataset.storename;
+                        embedContentDiv.innerHTML = this.dataset.embed; // Tampilkan embed code
+                        imageDisplayDiv.style.display = 'block'; // Tampilkan div gambar
+                    });
+                    tdNama.appendChild(spanNama);
+
+                    // Kolom Tanggal Order
+                    const tdOrder = document.createElement('td');
+                    tdOrder.textContent = tglOrder;
+
+                    // Kolom Tanggal Tagihan
+                    const tdTagihan = document.createElement('td');
+                    tdTagihan.textContent = tglTagihan;
+
+                    // Kolom Jumlah Tagihan
+                    const tdJumlah = document.createElement('td');
+                    tdJumlah.textContent = jmlTagihan;
+
+                    tr.appendChild(tdNama);
+                    tr.appendChild(tdOrder);
+                    tr.appendChild(tdTagihan);
+                    tr.appendChild(tdJumlah);
+
+                    dataTableBody.appendChild(tr);
+                }
+
+                loadingDiv.style.display = 'none'; // Sembunyikan loading
+                dataTable.style.display = 'table'; // Tampilkan tabel
+            })
+            .catch(error => {
+                console.error('Error fetching or processing data:', error);
+                loadingDiv.style.display = 'none'; // Sembunyikan loading
+                errorDiv.textContent = `Gagal memuat data: ${error.message}. Pastikan Google Sheet sudah dipublikasikan ke web dan periksa koneksi internet.`;
+                errorDiv.style.display = 'block'; // Tampilkan pesan error
+            });
+    </script>
+
+</body>
+</html>
